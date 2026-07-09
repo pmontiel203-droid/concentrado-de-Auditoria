@@ -115,6 +115,8 @@ def parse_conc_dictamenes(wb):
         rec_detalle = recuperadas.get(catnorm, {c: 0.0 for c in NEGADO_CAUSAS})
         negado_total = sum(negado_detalle.values())
         recuperado_total = sum(rec_detalle.values())
+        # fila completa (col 3..37) para reconstruir la hoja SEMANA con todo el detalle
+        detalle_full = {str(c): num(cell(r, c)) for c in range(3, 38)}
         reg = {
             "catalogo": str(cat).strip(),
             "responsable": str(cell(r, 2)).strip() if cell(r, 2) else "",
@@ -132,6 +134,7 @@ def parse_conc_dictamenes(wb):
             "observaciones": "",
             "negado_detalle": negado_detalle,
             "recuperado_detalle": rec_detalle,
+            "detalle_full": detalle_full,
         }
         registros.append(reg)
 
@@ -166,6 +169,15 @@ def validar_exhibiciones(wb, registros):
 
 # ---------------- Generación de reportes ----------------
 
+CATALOGO_ORDEN = ["BOTAS", "URBANO", "ESCOLAR", "SANDALIAS", "CONFORT",
+                  "VESTIR CASUAL", "INFANTILES", "CABALLEROS", "CHANCLERO",
+                  "ROPA DOBLADA", "ROPA COLGADA", "IMPORTADOS", "BARRA DE BEBES",
+                  "JEANS", "MOCHILAS", "HASTA"]
+
+# columnas de detalle (3..37); la 5 es % de cobertura (se recalcula en agregados)
+DET_COLS = [c for c in range(3, 38)]
+
+
 def _store_row_map(ws, r_ini, r_fin):
     """Mapea nombre normalizado de tienda -> fila, en un rango de la plantilla."""
     m = {}
@@ -177,7 +189,7 @@ def _store_row_map(ws, r_ini, r_fin):
 
 
 def _fill_section(ws, r_ini, r_fin, por_tienda):
-    """Rellena una sección (Calzado/Ropa) del MACHOTE con datos agregados por tienda."""
+    """Rellena una sección (Calzado/Ropa) de la hoja Concentrado del MACHOTE."""
     row_map = _store_row_map(ws, r_ini, r_fin)
     for tienda_norm, agg in por_tienda.items():
         row = row_map.get(tienda_norm)
@@ -194,7 +206,7 @@ def _fill_section(ws, r_ini, r_fin, por_tienda):
 
 
 def _aggregate(registros):
-    """Agrupa registros por (area, tienda)."""
+    """Agrupa registros por (area, tienda) para la hoja Concentrado."""
     out = {"Calzado": {}, "Ropa": {}}
     for reg in registros:
         area = reg.get("area", "Calzado")
@@ -217,14 +229,112 @@ def _aggregate(registros):
     return out
 
 
+def _det(reg, col):
+    return (reg.get("detalle_full") or {}).get(str(col), 0.0)
+
+
+def _fill_semana(ws, registros):
+    """Rellena la hoja SEMANA: Calzado por tienda, Ropa por tienda y
+    el detalle por catálogo de cada tienda (nivel catálogos)."""
+    # localizar cabeceras dinámicamente
+    calzado_hdr = ropa_hdr = None
+    bloques = {}  # tienda_norm -> fila cabecera del bloque de detalle
+    for r in range(1, min(ws.max_row, 500) + 1):
+        c1 = ws.cell(row=r, column=1).value
+        c2 = ws.cell(row=r, column=2).value
+        n2 = norm(c2)
+        if n2 == "CALZADO":
+            calzado_hdr = r
+        elif n2 == "ROPA":
+            ropa_hdr = r
+        elif n2 == "RESPONSABLE DE CATALOGO" and c1:
+            bloques[norm(c1)] = r
+
+    # --- Partes 1 y 2: agregados por tienda (Calzado / Ropa) ---
+    def fill_area(hdr, area):
+        if not hdr:
+            return
+        rows = {}
+        for r in range(hdr + 1, hdr + 18):
+            v = ws.cell(row=r, column=1).value
+            if v and isinstance(v, str) and norm(v) not in ("", "TOTAL"):
+                rows[norm(v)] = r
+        # sumar por tienda los catálogos de esa área
+        agg = {}
+        for reg in registros:
+            if reg.get("area") != area:
+                continue
+            t = norm(reg["tienda"])
+            d = agg.setdefault(t, {c: 0.0 for c in DET_COLS})
+            for c in DET_COLS:
+                if c == 5:
+                    continue
+                d[c] += _det(reg, c)
+        for tnorm, d in agg.items():
+            row = _match_row(rows, tnorm)
+            if not row:
+                continue
+            for c in DET_COLS:
+                if c == 5:
+                    pas, mod = d.get(3, 0), d.get(4, 0)
+                    ws.cell(row=row, column=5, value=(mod / pas) if pas else 0)
+                else:
+                    ws.cell(row=row, column=c, value=round(d[c], 2))
+
+    fill_area(calzado_hdr, "Calzado")
+    fill_area(ropa_hdr, "Ropa")
+
+    # --- Parte 3: detalle por catálogo de cada tienda ---
+    por_tienda = {}
+    for reg in registros:
+        por_tienda.setdefault(norm(reg["tienda"]), {})[norm(reg["catalogo"])] = reg
+    for tnorm, hdr in bloques.items():
+        cats = _match_dict(por_tienda, tnorm)
+        if not cats:
+            continue
+        for i, cat_nombre in enumerate(CATALOGO_ORDEN):
+            row = hdr + 1 + i
+            reg = cats.get(norm(cat_nombre))
+            ws.cell(row=row, column=1, value=cat_nombre)
+            if reg:
+                ws.cell(row=row, column=2, value=reg.get("responsable", ""))
+                for c in DET_COLS:
+                    ws.cell(row=row, column=c, value=round(_det(reg, c), 2))
+
+
+def _match_row(rows_map, tnorm):
+    if tnorm in rows_map:
+        return rows_map[tnorm]
+    for k, v in rows_map.items():
+        if tnorm in k or k in tnorm:
+            return v
+    return None
+
+
+def _match_dict(por_tienda, tnorm):
+    if tnorm in por_tienda:
+        return por_tienda[tnorm]
+    for k, v in por_tienda.items():
+        if tnorm in k or k in tnorm:
+            return v
+    return None
+
+
 def generar_concentrado(registros, etiqueta):
-    """Genera un xlsx con formato MACHOTE. Devuelve bytes."""
+    """Genera un xlsx con formato MACHOTE (hojas SEMANA + Concentrado). Devuelve bytes."""
     wb = openpyxl.load_workbook(TEMPLATE_PATH)
+    # Hoja de detalle SEMANA (por tienda y por catálogo)
+    if "SEMANA" in wb.sheetnames:
+        _fill_semana(wb["SEMANA"], registros)
+        try:
+            wb["SEMANA"].cell(row=3, column=10, value=etiqueta)
+        except Exception:
+            pass
+    # Hoja de presentación Concentrado
     ws = wb["Concentrado "]
     agg = _aggregate(registros)
     _fill_section(ws, 8, 24, agg["Calzado"])
     _fill_section(ws, 39, 55, agg["Ropa"])
-    # etiquetas de periodo
     for (r, c) in [(3, 24), (3, 88), (3, 117), (34, 24), (34, 117)]:
         try:
             ws.cell(row=r, column=c, value=etiqueta)

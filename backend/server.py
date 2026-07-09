@@ -351,6 +351,15 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+async def crear_indices():
+    await db.registros.create_index([("semana", 1), ("anio", 1)])
+    await db.registros.create_index([("mes", 1), ("anio", 1)])
+    await db.registros.create_index([("anio", 1)])
+    await db.registros.create_index([("tienda_norm", 1), ("semana", 1), ("anio", 1)])
+    await db.import_logs.create_index([("timestamp", -1)])
+
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
