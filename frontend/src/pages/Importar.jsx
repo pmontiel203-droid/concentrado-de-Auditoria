@@ -29,7 +29,6 @@ export default function Importar({ onImported }) {
       return [...prev, ...arr.filter((f) => !names.has(f.name))];
     });
   }, []);
-
   const onDrop = (e) => {
     e.preventDefault(); setDrag(false);
     addFiles(e.dataTransfer.files);
@@ -117,7 +116,7 @@ export default function Importar({ onImported }) {
             const st = RESULT_STYLES[r.resultado] || RESULT_STYLES.OMITIDO;
             const Icon = st.icon;
             return (
-              <div key={i} className={`flex items-start gap-3 rounded-xl border p-3 ${st.cls}`} data-testid={`resultado-${i}`}>
+              <div key={`${r.archivo}-${i}`} className={`flex items-start gap-3 rounded-xl border p-3 ${st.cls}`} data-testid={`resultado-${i}`}>
                 <Icon className="h-5 w-5 mt-0.5 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">

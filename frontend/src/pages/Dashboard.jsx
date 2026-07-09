@@ -6,6 +6,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Store, AlertTriangle, TrendingDown, TrendingUp, Trophy, Boxes, Loader2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, Legend } from "recharts";
 
+const BAR_CHART_HEIGHT = 280;
+const LINE_CHART_HEIGHT = 260;
+const AXIS_TICK = { fontSize: 11 };
+const AXIS_TICK_SM = { fontSize: 10 };
+const BAR_CHART_MARGIN = { left: 20 };
+const BAR_RADIUS = [0, 4, 4, 0];
+
 function Kpi({ icon: Icon, label, value, sub, accent }) {
   return (
     <Card className="p-4 sar-fade" data-testid={`kpi-${label}`}>
@@ -27,6 +34,7 @@ export default function Dashboard({ semanas }) {
 
   useEffect(() => {
     if (semanas.length && !sel) setSel(`${semanas[0].semana}|${semanas[0].anio}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [semanas]);
 
   useEffect(() => {
@@ -37,6 +45,7 @@ export default function Dashboard({ semanas }) {
       api.get(`/dashboard?semana=${semana}&anio=${anio}`),
       api.get(`/comparativo?anio=${anio}&tipo=semana`),
     ]).then(([d, c]) => { setData(d.data); setComp(c.data); }).finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sel]);
 
   if (!semanas.length) {
@@ -94,14 +103,14 @@ export default function Dashboard({ semanas }) {
 
             <Card className="p-5">
               <h3 className="font-semibold text-slate-800 mb-3">Resultados por catálogo</h3>
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={data.por_catalogo.slice(0, 10)} layout="vertical" margin={{ left: 20 }}>
+              <ResponsiveContainer width="100%" height={BAR_CHART_HEIGHT}>
+                <BarChart data={data.por_catalogo.slice(0, 10)} layout="vertical" margin={BAR_CHART_MARGIN}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#eef2f7" />
-                  <XAxis type="number" tick={{ fontSize: 11 }} />
-                  <YAxis type="category" dataKey="catalogo" width={90} tick={{ fontSize: 10 }} />
+                  <XAxis type="number" tick={AXIS_TICK} />
+                  <YAxis type="category" dataKey="catalogo" width={90} tick={AXIS_TICK_SM} />
                   <Tooltip />
-                  <Bar dataKey="negado" fill="#f5a524" radius={[0, 4, 4, 0]} name="Negado" />
-                  <Bar dataKey="recuperado" fill="#10b981" radius={[0, 4, 4, 0]} name="Recuperado" />
+                  <Bar dataKey="negado" fill="#f5a524" radius={BAR_RADIUS} name="Negado" />
+                  <Bar dataKey="recuperado" fill="#10b981" radius={BAR_RADIUS} name="Recuperado" />
                 </BarChart>
               </ResponsiveContainer>
             </Card>
@@ -124,11 +133,11 @@ export default function Dashboard({ semanas }) {
 
             <Card className="p-5">
               <h3 className="font-semibold text-slate-800 mb-3">Comparativo por semana ({sel.split("|")[1]})</h3>
-              <ResponsiveContainer width="100%" height={260}>
+              <ResponsiveContainer width="100%" height={LINE_CHART_HEIGHT}>
                 <LineChart data={comp}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
-                  <XAxis dataKey="periodo" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
+                  <XAxis dataKey="periodo" tick={AXIS_TICK} />
+                  <YAxis tick={AXIS_TICK} />
                   <Tooltip /><Legend />
                   <Line type="monotone" dataKey="pct_negado" stroke="#ef4444" name="% Negado" strokeWidth={2} />
                   <Line type="monotone" dataKey="pct_recuperado" stroke="#10b981" name="% Recuperado" strokeWidth={2} />

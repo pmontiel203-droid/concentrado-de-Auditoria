@@ -23,6 +23,7 @@ export default function Historial() {
   useEffect(() => {
     api.get("/imports").then((r) => setLogs(r.data));
     api.get("/registros").then((r) => setRegs(r.data));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filtered = regs.filter((r) => {

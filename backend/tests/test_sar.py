@@ -172,6 +172,84 @@ def test_reporte_semanal_excel():
     assert col64 is not None, f"col 64 empty at row {found_row}"
 
 
+# ---------- 10b. detalle_full present in registros ----------
+def test_registros_detalle_full():
+    # ensure data
+    with open(SAMPLE, "rb") as f:
+        _post_import(f.read(), forzar=True)
+    regs = requests.get(f"{API}/registros", params={"semana": SEMANA, "anio": ANIO}, timeout=30).json()
+    ecatepec = [r for r in regs if "ECATEPEC" in (r.get("tienda") or "").upper()]
+    assert len(ecatepec) == 16
+    for r in ecatepec:
+        assert "detalle_full" in r, "missing detalle_full key"
+        df = r["detalle_full"]
+        assert isinstance(df, dict)
+        # keys '3'..'37' expected
+        for c in range(3, 38):
+            assert str(c) in df, f"detalle_full missing col {c}"
+
+
+# ---------- 10c. SEMANA sheet filled ----------
+def test_reporte_semanal_semana_sheet():
+    r = requests.get(f"{API}/reporte/semanal", params={"semana": SEMANA, "anio": ANIO}, timeout=60)
+    assert r.status_code == 200
+    wb = openpyxl.load_workbook(io.BytesIO(r.content))
+    assert "SEMANA" in wb.sheetnames, f"SEMANA sheet missing. Sheets: {wb.sheetnames}"
+    ws = wb["SEMANA"]
+
+    # (a) Calzado per-store row for Ecatepec in rows 7..23
+    ec_row = None
+    for row in range(7, 24):
+        v = ws.cell(row=row, column=1).value
+        if v and "ecatepec" in str(v).lower():
+            ec_row = row
+            break
+    assert ec_row, "Ecatepec Calzado row not found in 7..23"
+    col3 = ws.cell(row=ec_row, column=3).value
+    col4 = ws.cell(row=ec_row, column=4).value
+    assert col3 is not None and float(col3) > 0, f"col3 not populated: {col3}"
+    assert col4 is not None and float(col4) > 0, f"col4 not populated: {col4}"
+
+    # (b) per-catalog detail block: find row where col1 contains Ecatepec and col2=='Responsable De Catalogo'
+    block_row = None
+    for row in range(1, ws.max_row + 1):
+        c1 = ws.cell(row=row, column=1).value
+        c2 = ws.cell(row=row, column=2).value
+        if c1 and "ecatepec" in str(c1).lower() and c2 and "responsable" in str(c2).lower():
+            block_row = row
+            break
+    assert block_row, "Ecatepec per-catalog header row not found"
+
+    # next 16 rows should have catalog labels in col1
+    labels = []
+    for i in range(1, 17):
+        v = ws.cell(row=block_row + i, column=1).value
+        labels.append(str(v).upper() if v else "")
+    joined = " ".join(labels)
+    assert "BOTAS" in joined, f"BOTAS missing in catalog block: {labels}"
+    assert "URBANO" in joined, f"URBANO missing in catalog block: {labels}"
+
+    # at least one row has a responsable in col2 and numeric col4>0
+    found_numeric = False
+    for i in range(1, 17):
+        r_ = block_row + i
+        c2 = ws.cell(row=r_, column=2).value
+        c4 = ws.cell(row=r_, column=4).value
+        if c2 and isinstance(c4, (int, float)) and float(c4) > 0:
+            found_numeric = True
+            break
+    assert found_numeric, "No catalog detail row with responsable and numeric col4>0"
+
+    # (c) Concentrado Ecatepec row col6 populated
+    ws2 = wb["Concentrado "]
+    for row in range(1, ws2.max_row + 1):
+        v = ws2.cell(row=row, column=2).value
+        if v and "ecatepec" in str(v).lower():
+            c6 = ws2.cell(row=row, column=6).value
+            assert c6 and float(c6) > 0, f"Concentrado Ecatepec col6 empty: {c6}"
+            break
+
+
 # ---------- 11. Reporte mensual ----------
 def test_reporte_mensual():
     r = requests.get(f"{API}/reporte/mensual", params={"mes": 7, "anio": ANIO}, timeout=60)

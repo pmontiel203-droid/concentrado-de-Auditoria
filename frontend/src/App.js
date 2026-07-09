@@ -21,6 +21,7 @@ function App() {
 
   const loadSemanas = useCallback(() => {
     api.get("/semanas").then((r) => setSemanas(r.data)).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => { loadSemanas(); }, [loadSemanas]);
