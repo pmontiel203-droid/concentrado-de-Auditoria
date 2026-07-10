@@ -58,8 +58,14 @@ async def importar_archivos(
             continue
 
         if not sx.es_archivo_valido(wb):
+            if sx.es_concentrado_armado(wb):
+                await _importar_concentrado_armado(wb, f.filename, usuario, entry)
+                resultados.append(entry)
+                wb.close()
+                continue
             entry["resultado"] = "OMITIDO"
-            entry["observaciones"] = "No contiene las hojas 'Conc Dictamenes' y 'Exhibiciones'"
+            entry["observaciones"] = ("No contiene las hojas 'Conc Dictamenes' y "
+                                      "'Exhibiciones' ni hojas 'SEMANA' con detalle por catálogo")
             resultados.append(entry)
             wb.close()
             continue
@@ -113,6 +119,54 @@ async def importar_archivos(
         await _log_import(entry, meta, usuario)
 
     return {"resultados": resultados}
+
+
+async def _importar_concentrado_armado(wb, filename, usuario, entry):
+    """Importa un Concentrado ya armado (hojas SEMANA) directo al histórico, sin validar."""
+    registros = sx.parse_concentrado_armado(wb)
+    if not registros:
+        entry["resultado"] = "OMITIDO"
+        entry["observaciones"] = "Archivo de concentrado sin datos por catálogo."
+        return
+
+    # sobrescribir por (tienda, semana, año)
+    claves = {(sx.norm(r["tienda"]), r["semana"], r["anio"]) for r in registros}
+    for tnorm, semana, anio in claves:
+        await db.registros.delete_many({"tienda_norm": tnorm, "semana": semana, "anio": anio})
+
+    fecha_imp = now_iso()
+    docs = []
+    for reg in registros:
+        docs.append({
+            "id": str(uuid.uuid4()),
+            "fecha_importacion": fecha_imp,
+            "nombre_archivo": filename,
+            "tienda_norm": sx.norm(reg["tienda"]),
+            **reg,
+        })
+    if docs:
+        await db.registros.insert_many(docs)
+
+    semanas = sorted({r["semana"] for r in registros if r["semana"]})
+    tiendas = sorted({r["tienda"] for r in registros if r["tienda"]})
+    entry["resultado"] = "IMPORTADO"
+    entry["tienda"] = f"{len(tiendas)} tiendas"
+    entry["semana"] = ", ".join(str(s) for s in semanas) if semanas else None
+    entry["registros"] = len(registros)
+    entry["observaciones"] = (
+        f"Concentrado armado: {len(registros)} registros, "
+        f"semanas [{', '.join(str(s) for s in semanas)}], {len(tiendas)} tiendas."
+    )
+    ahora = datetime.now(timezone.utc)
+    await db.import_logs.insert_one({
+        "id": str(uuid.uuid4()),
+        "fecha": ahora.strftime("%Y-%m-%d"), "hora": ahora.strftime("%H:%M:%S"),
+        "timestamp": ahora.isoformat(),
+        "semana": entry["semana"], "anio": registros[0].get("anio"),
+        "tienda": entry["tienda"], "archivo": filename,
+        "resultado": entry["resultado"], "observaciones": entry["observaciones"],
+        "usuario": usuario,
+    })
 
 
 async def _log_import(entry, meta, usuario):

@@ -167,6 +167,86 @@ def validar_exhibiciones(wb, registros):
     }
 
 
+# ---------------- Importación de Concentrados YA ARMADOS ----------------
+# Estos archivos (Concentrado de Auditoría y Recuperación) traen varias hojas
+# 'SEMANA xx' con el detalle por catálogo y por tienda (Parte 3). Se leen tal cual
+# hacia la Base Histórica, SIN validación de Exhibiciones.
+
+def es_concentrado_armado(wb):
+    """True si el archivo tiene al menos una hoja 'SEMANA' con bloques por catálogo."""
+    for name in wb.sheetnames:
+        if norm(name).startswith("SEMANA"):
+            ws = wb[name]
+            for r in range(1, min(ws.max_row, 130) + 1):
+                if norm(ws.cell(row=r, column=2).value) == "RESPONSABLE DE CATALOGO":
+                    return True
+    return False
+
+
+def _registro_desde_detalle(ws, row, tienda, semana, mes, anio, periodo):
+    cat = ws.cell(row=row, column=1).value
+    if cat is None or norm(cat) in ("", "TOTAL"):
+        return None
+    resp = ws.cell(row=row, column=2).value
+    resp = "" if resp is None or str(resp).strip() in ("", "0") else str(resp).strip()
+    det = {str(c): num(ws.cell(row=row, column=c).value) for c in range(3, 38)}
+    negado_detalle = {NEGADO_CAUSAS[i]: num(ws.cell(row=row, column=6 + i).value) for i in range(14)}
+    negado_total = sum(negado_detalle.values())
+    # descartar filas totalmente vacías (catálogos no auditados)
+    if det["3"] == 0 and det["4"] == 0 and negado_total == 0 and det["20"] == 0:
+        return None
+    return {
+        "catalogo": str(cat).strip(), "responsable": resp,
+        "area": area_de_catalogo(cat),
+        "total_pasillo": det["3"], "auditados": det["4"], "pct_cobertura": det["5"],
+        "frente": det["6"], "bodega": det["8"],
+        "negado": negado_total, "recuperado": 0.0,
+        "exhibicion": det["15"], "sin_exhibicion": det["21"], "costo": det["20"],
+        "observaciones": "",
+        "negado_detalle": negado_detalle,
+        "recuperado_detalle": {c: 0.0 for c in NEGADO_CAUSAS},
+        "detalle_full": det,
+        "semana": semana, "mes": mes, "anio": anio,
+        "periodo": str(periodo).strip() if periodo else "",
+        "tienda": str(tienda).strip(),
+    }
+
+
+def _parse_hoja_semana(ws, semana_defecto):
+    sem = parse_semana(ws.cell(row=3, column=10).value) or semana_defecto
+    periodo = ws.cell(row=3, column=25).value
+    mes, anio = parse_periodo(periodo)
+    registros = []
+    maxr = min(ws.max_row, 700)
+    r = 1
+    while r <= maxr:
+        if norm(ws.cell(row=r, column=2).value) == "RESPONSABLE DE CATALOGO" and ws.cell(row=r, column=1).value:
+            tienda = str(ws.cell(row=r, column=1).value).strip()
+            rr = r + 1
+            leidas = 0
+            while rr <= maxr and leidas < 20:
+                if norm(ws.cell(row=rr, column=2).value) == "TOTAL":
+                    break
+                reg = _registro_desde_detalle(ws, rr, tienda, sem, mes, anio, periodo)
+                if reg:
+                    registros.append(reg)
+                rr += 1
+                leidas += 1
+            r = rr
+        r += 1
+    return registros
+
+
+def parse_concentrado_armado(wb):
+    """Devuelve lista plana de registros leídos de todas las hojas SEMANA."""
+    out = []
+    for name in wb.sheetnames:
+        if norm(name).startswith("SEMANA"):
+            out.extend(_parse_hoja_semana(wb[name], parse_semana(name)))
+    return out
+
+
+
 # ---------------- Generación de reportes ----------------
 
 CATALOGO_ORDEN = ["BOTAS", "URBANO", "ESCOLAR", "SANDALIAS", "CONFORT",

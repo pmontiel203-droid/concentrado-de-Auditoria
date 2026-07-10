@@ -57,7 +57,7 @@ export default function Importar({ onImported }) {
     <div className="sar-fade space-y-6">
       <div>
         <h1 className="font-display text-3xl font-bold text-slate-900">Importar auditorías</h1>
-        <p className="text-slate-500 mt-1 text-sm">Sube los archivos Excel de las 17 tiendas de la semana. El sistema detecta las hojas <b>Conc Dictámenes</b> y <b>Exhibiciones</b>, valida y consolida automáticamente.</p>
+        <p className="text-slate-500 mt-1 text-sm">Sube los archivos Excel de las 17 tiendas de la semana. El sistema detecta las hojas <b>Conc Dictámenes</b> y <b>Exhibiciones</b>, valida y consolida automáticamente. También puedes subir <b>concentrados ya armados</b> de meses anteriores (con hojas <b>SEMANA</b>) y se agregan directo al histórico, mensual y anual.</p>
       </div>
 
       <div
