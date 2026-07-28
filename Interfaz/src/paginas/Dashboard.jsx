@@ -62,7 +62,7 @@ export default function Dashboard({ semanas }) {
         <Select value={sel} onValueChange={setSel}>
           <SelectTrigger className="w-56 bg-white" data-testid="semana-select"><SelectValue placeholder="Selecciona semana" /></SelectTrigger>
           <SelectContent>
-            {semanas.map((s) => (
+            {semanas?.map((s) => (
               <SelectItem key={`${s.semana}|${s.anio}`} value={`${s.semana}|${s.anio}`}>
                 Semana {s.semana} · {s.anio} ({s.num_tiendas} tiendas)
               </SelectItem>
@@ -90,7 +90,7 @@ export default function Dashboard({ semanas }) {
             <Card className="p-5">
               <h3 className="font-semibold text-slate-800 mb-1 flex items-center gap-2"><Trophy className="h-4 w-4 text-amber-500" /> Ranking de tiendas (% recuperado)</h3>
               <div className="mt-3 space-y-1.5 max-h-72 overflow-auto" data-testid="ranking-tiendas">
-                {data.ranking_tiendas.map((t, i) => (
+                {data.ranking_tiendas?.map((t, i) => (
                   <div key={t.tienda} className="flex items-center gap-3 text-sm py-1.5 border-b border-slate-50">
                     <span className="w-6 text-center font-bold text-slate-300">{i + 1}</span>
                     <span className="flex-1 truncate text-slate-700">{t.tienda}</span>
