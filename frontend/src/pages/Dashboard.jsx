@@ -120,7 +120,7 @@ export default function Dashboard({ semanas }) {
             <Card className="p-5">
               <h3 className="font-semibold text-slate-800 mb-1 flex items-center gap-2"><Trophy className="h-4 w-4 text-amber-500" /> Ranking de responsables</h3>
               <div className="mt-3 space-y-1.5 max-h-64 overflow-auto" data-testid="ranking-responsables">
-                {data.ranking_responsables.map((t, i) => (
+                {data.ranking_responsables?.map((t, i) => (
                   <div key={t.responsable} className="flex items-center gap-3 text-sm py-1.5 border-b border-slate-50">
                     <span className="w-6 text-center font-bold text-slate-300">{i + 1}</span>
                     <span className="flex-1 truncate text-slate-700">{t.responsable}</span>
